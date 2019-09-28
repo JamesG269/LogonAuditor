@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:LogonAuditor"
         mc:Ignorable="d"
-        Title="Logon Auditor v1.0 by James Gentile" Height="700" Width="800" Loaded="Window_Loaded">
+        Title="Logon Auditor v1.0 by James Gentile" Height="800" Width="1200" Loaded="Window_Loaded">
     <Grid>
         <Button Content="Start" HorizontalAlignment="Left" Margin="10,10,0,0" VerticalAlignment="Top" Width="75" Click="Button_Click"/>
         <TextBox Name="textBlock" 
