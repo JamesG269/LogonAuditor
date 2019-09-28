@@ -23,6 +23,7 @@ using System.Windows.Threading;
 using System.IO;
 using System.Xml.Serialization;
 using Microsoft.Win32;
+using System.Runtime.Serialization;
 
 namespace LogonAuditor
 {
@@ -31,7 +32,18 @@ namespace LogonAuditor
     /// </summary>
     public partial class MainWindow : Window
     {
+        Dictionary<string, int> DayOfWeek = new Dictionary<string, int>()
+            {
+                {"Monday",0 },
+                {"Tuesday", 1 },
+                {"Wednesday", 2 },
+                {"Thursday", 3 },
+                {"Friday", 4 },
+                {"Saturday", 5 },
+                {"Sunday", 6 }
+            };
         string appDir;
+        int OneInt = 0;
         public MainWindow()
         {
             InitializeComponent();
@@ -39,67 +51,81 @@ namespace LogonAuditor
 
         private void Button_Click(object sender, RoutedEventArgs e)
         {
+            if (0 != Interlocked.Exchange(ref OneInt, 1))
+            {
+                return;
+            }
             textBlock.Clear();
-            sb.Clear();
             Task.Factory.StartNew(() => getData());
         }
-        StringBuilder sb = new StringBuilder();
-        
 
         public class userInfo
         {
             public int LogOnNum = 0;
             public int LogOffNum = 0;
-            public int[] LogOnTimes = new int[24];
-            public int[] LogOffTimes = new int[24];
+            public int[] LogOnHours = new int[24];
+            public int[] LogOffHours = new int[24];
             public string userSID;
+            public int[] LogOnDays = new int[7];
+            public int[] LogOffDays = new int[7];
+            public List<DateTime> UnusualLogOns = new List<DateTime>();
+            public List<DateTime> UnusualLogOffs = new List<DateTime>();
+            public string username;
         }
 
         private void getData()
         {
+            StringBuilder sb = new StringBuilder();
             Thread.CurrentThread.CurrentCulture = new CultureInfo("en-US");
             List<userInfo> userInfoList = new List<userInfo>();
-            Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => textBlock.Text += "Querying Log Ons ...\n"));
+            Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() => textBlock.Text += "Querying Log Ons & Log offs ...\n"));
             string query = "*";
             EventLogQuery eventsQuery = new EventLogQuery("system", PathType.LogName, query);
             try
             {
                 EventLogReader logReader = new EventLogReader(eventsQuery);
+
                 for (EventRecord eventdetail = logReader.ReadEvent(); eventdetail != null; eventdetail = logReader.ReadEvent())
                 {
+                    if (eventdetail.Id != 7001 && eventdetail.Id != 7002)
+                    {
+                        continue;
+                    }
+                    string userSID = eventdetail.Properties[1].Value.ToString();
+                    string username = Environment.MachineName + @"\" + userSID;
+                    try
+                    {
+                        SecurityIdentifier s = new SecurityIdentifier(userSID);
+                        if (s.IsAccountSid())
+                        {
+                            username = s.Translate(typeof(NTAccount)).Value;
+                        }
+                    }
+                    catch { }                    
+                    int c = userInfoList.Where(u => u.userSID == userSID).Count();
+                    if (c == 0)
+                    {
+                        userInfo tempUI = new userInfo();
+                        tempUI.userSID = userSID;
+                        userInfoList.Add(tempUI);
+                    }
+                    userInfo uI = userInfoList.Where(u => u.userSID == userSID).FirstOrDefault();
+                    uI.userSID = userSID;
+                    uI.username = username;
                     if (eventdetail.Id == 7001)
                     {
-                        string userSID = eventdetail.Properties[1].Value.ToString();
-                        int c = userInfoList.Where(u => u.userSID == userSID).Count();
-                        if (c == 0)
-                        {
-                            userInfo tempUI = new userInfo();
-                            tempUI.userSID = userSID;
-                            userInfoList.Add(tempUI);
-                        }
-                        userInfo uI = userInfoList.Where(u => u.userSID == userSID).FirstOrDefault();
-                        uI.LogOnTimes[eventdetail.TimeCreated.Value.Hour]++;
-                        uI.LogOnNum++;
+                        evalDateTime(eventdetail, ref uI.LogOnDays, ref uI.LogOnHours, ref uI.LogOnNum, uI.UnusualLogOns);
                     }
                     else if (eventdetail.Id == 7002)
                     {
-                        string userSID = eventdetail.Properties[1].Value.ToString();
-                        int c = userInfoList.Where(u => u.userSID == userSID).Count();
-                        if (c == 0)
-                        {
-                            userInfo tempUI = new userInfo();
-                            tempUI.userSID = userSID;
-                            userInfoList.Add(tempUI);
-                        }
-                        userInfo uI = userInfoList.Where(u => u.userSID == userSID).FirstOrDefault();
-                        uI.LogOffTimes[eventdetail.TimeCreated.Value.Hour]++;
-                        uI.LogOffNum++;
+                        evalDateTime(eventdetail, ref uI.LogOffDays, ref uI.LogOffHours, ref uI.LogOffNum, uI.UnusualLogOffs);
                     }
                 }
             }
             catch (EventLogNotFoundException e)
             {
-                MessageBox.Show("Error reading event log.");
+                MessageBox.Show("Error reading event log: " + e.InnerException.Message);
+                Interlocked.Exchange(ref OneInt, 0);
                 return;
             }
 
@@ -111,49 +137,87 @@ namespace LogonAuditor
             {
                 serializer.Serialize(streamWriter, userInfoList);
             }
-            sb.Append("Data logged to: " + saveFile + "\n");
-            addUserInfoToSB(userInfoList);
-            Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
-            { textBlock.Text += "Queries complete.\n"; textBlock.Text += sb.ToString(); }
-            ));
+            sb.Append("Data logged to: " + saveFile);
+            sb.Append("\n");
+            addUserInfoToSB(userInfoList, sb);
+            Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() =>
+            {
+                textBlock.Text += "Queries complete.";
+                textBlock.Text += "\n";
+                textBlock.Text += sb.ToString();                
+            }));
+            Interlocked.Exchange(ref OneInt, 0);
         }
 
-        private void addUserInfoToSB(List<userInfo> userInfoList)
+        private void evalDateTime(EventRecord eventdetail, ref int[] eventDays, ref int[] eventTimes, ref int eventNum, List<DateTime> UnusualEvents)
+        {
+            int day;
+            int hour;
+            DateTime eventDateTime = eventdetail.TimeCreated ?? DateTime.Now;
+            hour = eventDateTime.Hour;
+            eventTimes[hour]++;
+            day = DayOfWeek[eventDateTime.DayOfWeek.ToString()];
+            eventDays[day]++;
+            eventNum++;
+            if (hour < 8 || hour > 18 || day == 5 || day == 6)
+            {
+                UnusualEvents.Add(eventDateTime);
+            }
+        }
+
+        private void addUserInfoToSB(List<userInfo> userInfoList, StringBuilder sb)
         {
             foreach (var uI in userInfoList)
-            {                
-                sb.Append("\nLog On events: \n");
-                processUI(uI, uI.LogOnTimes);
-                sb.Append("\nLog Off events: \n");
-                processUI(uI, uI.LogOffTimes);
+            {
+                sb.Append("\n");
+                sb.Append("Username: " + uI.username);
+                sb.Append("\n");
+                processUI(uI.LogOnHours, uI.LogOnDays, uI.LogOnNum, uI.UnusualLogOns, sb, true);
+                processUI(uI.LogOffHours, uI.LogOffDays, uI.LogOffNum, uI.UnusualLogOffs, sb, false);
             }
         }
 
-        private void processUI(userInfo uI, int[] eventTimes)
+        private void processUI(int[] eventTimes, int[] eventDays, int eventNum, List<DateTime> UnusualEvents, StringBuilder sb, bool LogOns)
         {
-            string username;
-            try
+            string duration;
+            string eventType = "Log Ons";
+            if (!LogOns)
             {
-                SecurityIdentifier s = new SecurityIdentifier(uI.userSID);
-                username = s.Translate(typeof(NTAccount)).Value;
+                eventType = "Log Offs";
             }
-            catch
+            sb.Append(eventType + ":");
+            sb.Append("\n");
+            sb.Append(eventNum.ToString() + " " + eventType + " (total).");
+            sb.Append("\n");
+            sb.Append("Number of " + eventType + " - Hour of " + eventType + ": ");
+            sb.Append("\n");
+            for (int i = 0; i < eventTimes.Length; i++)
             {
-                username = "Could not translate SID.";
-            }
-            sb.Append("Username: " + username);
-            sb.Append("\n");
-            sb.Append("Number of events (total): " + uI.LogOnNum.ToString());
-            sb.Append("\n");
-            sb.Append("Number of events - Hour of Event: ");
-            sb.Append("\n");
-            for (int i = 0; i < 24; i++)
-            {
-                if (uI.LogOnTimes[i] > 0)
+                if (eventTimes[i] > 0)
                 {
-                    string dur = TranslateTime(i);
-                    dur += " - " + TranslateTime(i + 1);                    
-                    sb.Append(eventTimes[i].ToString() + " - " + dur + "\n");
+                    duration = TranslateTime(i);
+                    duration += " - " + TranslateTime(i + 1);
+                    sb.Append(eventTimes[i].ToString() + " - " + duration + "\n");
+                }
+            }
+            sb.Append("Number of " + eventType + " - day of the week: ");
+            sb.Append("\n");
+            for (int d = 0; d < eventDays.Length; d++)
+            {
+                if (eventDays[d] > 0)
+                {
+                    sb.Append(eventDays[d] + " - " + DayOfWeek.FirstOrDefault(x => x.Value == d).Key);
+                    sb.Append("\n");
+                }
+            }
+            sb.Append(UnusualEvents.Count().ToString() + " Unusual " + eventType + " (before 8am or after 6pm or on Saturday or Sunday): ");
+            sb.Append("\n");
+            if (UnusualEvents.Count() > 0)
+            {
+                foreach (var UE in UnusualEvents)
+                {
+                    sb.Append(UE.ToLongTimeString() + " - " + UE.ToLongDateString());
+                    sb.Append("\n");
                 }
             }
         }
@@ -161,7 +225,7 @@ namespace LogonAuditor
         private string TranslateTime(int hour)
         {
             string time;
-            hour = hour % 24;
+            hour %= 24;
             if (hour < 12)
             {
                 if (hour == 0)
@@ -174,7 +238,7 @@ namespace LogonAuditor
             {
                 if (hour > 12)
                 {
-                    hour = hour - 12;
+                    hour -= 12;
                 }
                 time = hour.ToString() + "PM";
             }
@@ -183,7 +247,11 @@ namespace LogonAuditor
 
         private void Button_OpenXML(object sender, RoutedEventArgs e)
         {
-            sb.Clear();
+            if (0 != Interlocked.Exchange(ref OneInt, 1))
+            {
+                return;
+            }
+            StringBuilder sb = new StringBuilder();
             textBlock.Clear();
             OpenFileDialog openFileDialog = new OpenFileDialog();
             openFileDialog.InitialDirectory = appDir;
@@ -200,10 +268,11 @@ namespace LogonAuditor
                 {
                     List<userInfo> userInfoListFromXML = new List<userInfo>();
                     userInfoListFromXML = (List<userInfo>)serializer.Deserialize(streamReader);
-                    addUserInfoToSB(userInfoListFromXML);                    
+                    addUserInfoToSB(userInfoListFromXML, sb);
                 }
             }
             textBlock.Text += sb.ToString();
+            Interlocked.Exchange(ref OneInt, 0);
         }
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
