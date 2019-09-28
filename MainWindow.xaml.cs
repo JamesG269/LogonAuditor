@@ -2,28 +2,18 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.Eventing.Reader;
-using System.DirectoryServices.AccountManagement;
 using System.Globalization;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
 using System.Windows.Threading;
 using System.IO;
 using System.Xml.Serialization;
 using Microsoft.Win32;
-using System.Runtime.Serialization;
+
 
 namespace LogonAuditor
 {
@@ -84,7 +74,6 @@ namespace LogonAuditor
             try
             {
                 EventLogReader logReader = new EventLogReader(eventsQuery);
-
                 for (EventRecord eventdetail = logReader.ReadEvent(); eventdetail != null; eventdetail = logReader.ReadEvent())
                 {
                     if (eventdetail.Id != 7001 && eventdetail.Id != 7002)
@@ -101,7 +90,7 @@ namespace LogonAuditor
                             username = s.Translate(typeof(NTAccount)).Value;
                         }
                     }
-                    catch { }                    
+                    catch { }
                     int c = userInfoList.Where(u => u.userSID == userSID).Count();
                     if (c == 0)
                     {
@@ -129,7 +118,7 @@ namespace LogonAuditor
                 return;
             }
 
-            var fileName = "LoginAuditor - " + Environment.MachineName + " - " + DateTime.Now.ToLongDateString() + " - " + DateTime.Now.ToLongTimeString() + ".xml";
+            var fileName = "LogonAuditor - " + Environment.MachineName + " - " + DateTime.Now.ToLongDateString() + " - " + DateTime.Now.ToLongTimeString() + ".xml";
             fileName = fileName.Replace(":", ".");
             string saveFile = System.IO.Path.Combine(appDir, fileName);
             XmlSerializer serializer = new XmlSerializer(typeof(List<userInfo>));
@@ -144,9 +133,9 @@ namespace LogonAuditor
             {
                 textBlock.Text += "Queries complete.";
                 textBlock.Text += "\n";
-                textBlock.Text += sb.ToString();                
-            }));
-            Interlocked.Exchange(ref OneInt, 0);
+                textBlock.Text += sb.ToString();
+                Interlocked.Exchange(ref OneInt, 0);
+            }));            
         }
 
         private void evalDateTime(EventRecord eventdetail, ref int[] eventDays, ref int[] eventTimes, ref int eventNum, List<DateTime> UnusualEvents)
@@ -251,8 +240,12 @@ namespace LogonAuditor
             {
                 return;
             }
-            StringBuilder sb = new StringBuilder();
             textBlock.Clear();
+            Task.Factory.StartNew(() => OpenXML());
+        }
+        private void OpenXML()
+        {
+            StringBuilder sb = new StringBuilder();            
             OpenFileDialog openFileDialog = new OpenFileDialog();
             openFileDialog.InitialDirectory = appDir;
             if (openFileDialog.ShowDialog() == false)
@@ -260,7 +253,10 @@ namespace LogonAuditor
                 return;
             }
             string fileName = openFileDialog.FileName;
-            textBlock.Text = "Loading data from: " + fileName + "\n";
+            Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() =>
+            {
+                textBlock.Text = "Loading data from: " + fileName + "\n";
+            }));
             XmlSerializer serializer = new XmlSerializer(typeof(List<userInfo>));
             if (File.Exists(fileName))
             {
@@ -271,8 +267,11 @@ namespace LogonAuditor
                     addUserInfoToSB(userInfoListFromXML, sb);
                 }
             }
-            textBlock.Text += sb.ToString();
-            Interlocked.Exchange(ref OneInt, 0);
+            Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() =>
+            {
+                textBlock.Text += sb.ToString();
+                Interlocked.Exchange(ref OneInt, 0);
+            }));            
         }
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
