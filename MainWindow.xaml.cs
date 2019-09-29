@@ -38,7 +38,6 @@ namespace LogonAuditor
         {
             InitializeComponent();
         }
-
         private void Button_Click(object sender, RoutedEventArgs e)
         {
             if (0 != Interlocked.Exchange(ref OneInt, 1))
@@ -50,7 +49,6 @@ namespace LogonAuditor
             textBlock.Text += Environment.NewLine;
             Task.Factory.StartNew(() => getData());
         }
-
         public class MachineInfo
         {
             public string machineName;
@@ -132,8 +130,12 @@ namespace LogonAuditor
             }
 
             var xmlFileName = "LogonAuditor - " + Environment.MachineName + " - " + DateTime.Now.ToLongDateString() + " - " + DateTime.Now.ToLongTimeString() + ".xml";
-            xmlFileName = xmlFileName.Replace(":", ".");
-            string xmlFilePath = Path.Combine(appDir, xmlFileName);
+            xmlFileName = xmlFileName.Replace(":", ".");            
+            if (!Directory.Exists(xmlLogDir))
+            {
+                Directory.CreateDirectory(xmlLogDir);
+            }
+            string xmlFilePath = Path.Combine(xmlLogDir, xmlFileName);
             XmlSerializer serializer = new XmlSerializer(typeof(MachineInfo));
             using (StreamWriter streamWriter = new StreamWriter(xmlFilePath))
             {
@@ -270,11 +272,15 @@ namespace LogonAuditor
         {
             StringBuilder sb = new StringBuilder();            
             OpenFileDialog openFileDialog = new OpenFileDialog();
-            openFileDialog.InitialDirectory = appDir;
+            if (Directory.Exists(xmlLogDir))
+            {
+                openFileDialog.InitialDirectory = xmlLogDir;
+            }
             if (openFileDialog.ShowDialog() == false)
             {
                 return;
             }
+            xmlLogDir = Path.GetDirectoryName(openFileDialog.FileName);
             string fileName = openFileDialog.FileName;
             Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() =>
             {
@@ -298,10 +304,59 @@ namespace LogonAuditor
             }));            
         }
 
+        string xmlLogDir;
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
             string exePath = Process.GetCurrentProcess().MainModule.FileName;
             appDir = System.IO.Path.GetDirectoryName(exePath);
+            xmlLogDir = Path.Combine(appDir, "LogonAuditorLogs");
+            Get45PlusFromRegistry();
+        }
+        
+        public void Get45PlusFromRegistry()
+        {
+            const string subkey = @"SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full\";
+
+            using (var ndpKey = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry32).OpenSubKey(subkey))
+            {
+                if (ndpKey != null && ndpKey.GetValue("Release") != null)
+                {
+                    textBlock.Text += $".NET Framework Version: {CheckFor45PlusVersion((int)ndpKey.GetValue("Release"))}";
+                }
+                else
+                {
+                    textBlock.Text += ".NET Framework Version 4.5 or later is not detected.";
+                }
+                textBlock.Text += Environment.NewLine;
+            }
+
+            // Checking the version using >= enables forward compatibility.
+            string CheckFor45PlusVersion(int releaseKey)
+            {
+                if (releaseKey >= 528040)
+                    return "4.8 or later";
+                if (releaseKey >= 461808)
+                    return "4.7.2";
+                if (releaseKey >= 461308)
+                    return "4.7.1";
+                if (releaseKey >= 460798)
+                    return "4.7";
+                if (releaseKey >= 394802)
+                    return "4.6.2";
+                if (releaseKey >= 394254)
+                    return "4.6.1";
+                if (releaseKey >= 393295)
+                    return "4.6";
+                if (releaseKey >= 379893)
+                    return "4.5.2";
+                if (releaseKey >= 378675)
+                    return "4.5.1";
+                if (releaseKey >= 378389)
+                    return "4.5";
+                // This code should never execute. A non-null release key should mean
+                // that 4.5 or later is installed.
+                return "No 4.5 or later version detected";
+            }
         }
     }
 
