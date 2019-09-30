@@ -32,7 +32,7 @@ namespace LogonAuditor
                 {"Saturday", 5 },
                 {"Sunday", 6 }
             };
-        string appDir;
+        string appDir, xmlLogDir;
         int OneInt = 0;
         public MainWindow()
         {
@@ -59,22 +59,22 @@ namespace LogonAuditor
             public LogRecord LogOnEvents = new LogRecord()
             { logType = "Log on(s)" };
             public LogRecord LogOffEvents = new LogRecord()
-            { logType = "Log off(s)" };                
+            { logType = "Log off(s)" };
             public string userSID;
-            public string username;            
+            public string username;
         }
         public class LogRecord
         {
             public string logType;
-            public int Num = 0;            
-            public int[] Hours = new int[24];            
-            public int[] Days = new int[7];            
-            public List<DateTime> UnusualTimes = new List<DateTime>();            
+            public int Num = 0;
+            public int[] Hours = new int[24];
+            public int[] Days = new int[7];
+            public List<DateTime> UnusualTimes = new List<DateTime>();
         }
-        
+
         private void getData()
         {
-            StringBuilder sb = new StringBuilder();            
+            StringBuilder sb = new StringBuilder();
             Thread.CurrentThread.CurrentCulture = new CultureInfo("en-US");
             MachineInfo machineInfoObject = new MachineInfo
             {
@@ -85,13 +85,17 @@ namespace LogonAuditor
             try
             {
                 EventLogReader logReader = new EventLogReader(eventsQuery);
-                for (EventRecord eventdetail = logReader.ReadEvent(); eventdetail != null; eventdetail = logReader.ReadEvent())
+                for (EventRecord eventDetail = logReader.ReadEvent(); eventDetail != null; eventDetail = logReader.ReadEvent())
                 {
-                    if (eventdetail.Id != 7001 && eventdetail.Id != 7002)
+                    if (eventDetail.Id != 7001 && eventDetail.Id != 7002)
                     {
                         continue;
                     }
-                    string userSID = eventdetail.Properties[1].Value.ToString();
+                    if (!eventDetail.TimeCreated.HasValue)
+                    {
+                        continue;
+                    }
+                    string userSID = eventDetail.Properties[1].Value.ToString();
                     string username = "Could not translate SID to username";
                     try
                     {
@@ -102,14 +106,10 @@ namespace LogonAuditor
                         }
                     }
                     catch { }
-                    if (!eventdetail.TimeCreated.HasValue)
-                    {
-                        continue;
-                    }
-                    UserInfoRecord userInfoRecord;                  
+                    UserInfoRecord userInfoRecord;
                     if (machineInfoObject.userInfoRecords.Where(u => u.userSID == userSID).Count() > 0)
                     {
-                        userInfoRecord = machineInfoObject.userInfoRecords.Where(u => u.userSID == userSID).FirstOrDefault();                        
+                        userInfoRecord = machineInfoObject.userInfoRecords.Where(u => u.userSID == userSID).FirstOrDefault();
                     }
                     else
                     {
@@ -119,14 +119,14 @@ namespace LogonAuditor
                             username = username,
                         };
                         machineInfoObject.userInfoRecords.Add(userInfoRecord);
-                    }                    
-                    if (eventdetail.Id == 7001)
-                    {
-                        evalDateTime(eventdetail, userInfoRecord.LogOnEvents);
                     }
-                    else if (eventdetail.Id == 7002)
+                    if (eventDetail.Id == 7001)
                     {
-                        evalDateTime(eventdetail, userInfoRecord.LogOffEvents);
+                        evalDateTime(eventDetail, userInfoRecord.LogOnEvents);
+                    }
+                    else if (eventDetail.Id == 7002)
+                    {
+                        evalDateTime(eventDetail, userInfoRecord.LogOffEvents);
                     }
                 }
                 logReader.Dispose();
@@ -137,9 +137,23 @@ namespace LogonAuditor
                 Interlocked.Exchange(ref OneInt, 0);
                 return;
             }
+            string xmlFilePath = saveToXML(machineInfoObject);
+            sb.Append("Data logged to: " + xmlFilePath);
+            sb.Append(Environment.NewLine);
+            addUserInfoToSB(machineInfoObject, sb);
+            Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() =>
+            {
+                textBlock.Text += "Queries complete.";
+                textBlock.Text += Environment.NewLine;
+                textBlock.Text += sb.ToString();
+                Interlocked.Exchange(ref OneInt, 0);
+            }));
+        }
 
+        private string saveToXML(MachineInfo machineInfoObject)
+        {
             var xmlFileName = "LogonAuditor - " + Environment.MachineName + " - " + DateTime.Now.ToLongDateString() + " - " + DateTime.Now.ToLongTimeString() + ".xml";
-            xmlFileName = xmlFileName.Replace(":", ".");            
+            xmlFileName = xmlFileName.Replace(":", ".");
             if (!Directory.Exists(xmlLogDir))
             {
                 Directory.CreateDirectory(xmlLogDir);
@@ -150,26 +164,15 @@ namespace LogonAuditor
             {
                 serializer.Serialize(streamWriter, machineInfoObject);
             }
-            sb.Append("Data logged to: " + xmlFilePath);
-            sb.Append(Environment.NewLine);
-            addUserInfoToSB(machineInfoObject, sb);
-            Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() =>
-            {
-                textBlock.Text += "Queries complete.";
-                textBlock.Text += Environment.NewLine;
-                textBlock.Text += sb.ToString();
-                Interlocked.Exchange(ref OneInt, 0);
-            }));            
+            return xmlFilePath;
         }
 
         private void evalDateTime(EventRecord eventdetail, LogRecord logRecord)
-        {            
-            int day;
-            int hour;
+        {
             DateTime eventDateTime = eventdetail.TimeCreated.Value;
-            hour = eventDateTime.Hour;
+            int hour = eventDateTime.Hour;
+            int day = DayOfWeek[eventDateTime.DayOfWeek.ToString()];
             logRecord.Hours[hour]++;
-            day = DayOfWeek[eventDateTime.DayOfWeek.ToString()];
             logRecord.Days[day]++;
             logRecord.Num++;
             if (hour < 8 || hour > 18 || day == 5 || day == 6)
@@ -198,7 +201,7 @@ namespace LogonAuditor
         private void processUI(LogRecord logRecord, StringBuilder sb)
         {
             string duration;
-            string eventType = logRecord.logType;            
+            string eventType = logRecord.logType;
             sb.Append(eventType + ":");
             sb.Append(Environment.NewLine);
             sb.Append(logRecord.Num.ToString() + " " + eventType + " (total).");
@@ -271,7 +274,7 @@ namespace LogonAuditor
         }
         private void OpenXML()
         {
-            StringBuilder sb = new StringBuilder();            
+            StringBuilder sb = new StringBuilder();
             OpenFileDialog openFileDialog = new OpenFileDialog();
             if (Directory.Exists(xmlLogDir))
             {
@@ -302,10 +305,8 @@ namespace LogonAuditor
             {
                 textBlock.Text += sb.ToString();
                 Interlocked.Exchange(ref OneInt, 0);
-            }));            
+            }));
         }
-
-        string xmlLogDir;
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
             string exePath = Process.GetCurrentProcess().MainModule.FileName;
@@ -313,7 +314,7 @@ namespace LogonAuditor
             xmlLogDir = Path.Combine(appDir, "LogonAuditorLogs");
             Get45PlusFromRegistry();
         }
-        
+
         public void Get45PlusFromRegistry()
         {
             const string subkey = @"SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full\";
