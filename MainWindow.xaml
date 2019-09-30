@@ -5,15 +5,18 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:LogonAuditor"
         mc:Ignorable="d"
-        Title="Logon Auditor v1.0 by James Gentile" Height="800" Width="1200" Loaded="Window_Loaded">
+        Title="Logon Auditor v1.0 by James Gentile" Height="800" Width="1200" Loaded="Window_Loaded"
+        BorderThickness="1">
     <Grid>
-        <Button Content="Start" HorizontalAlignment="Left" Margin="10,10,0,0" VerticalAlignment="Top" Width="75" Click="Button_Click"/>
-        <TextBox Name="textBlock" 
+        <DockPanel>
+            <DockPanel Margin="10,10,0,10" DockPanel.Dock="Top">
+                <Button Content="Start" Click="Button_Click" Width="100" HorizontalAlignment="Left"/>
+                <Button Content="Open Log .XML" Click="Button_OpenXML" Width="100" HorizontalAlignment="Left"/>
+            </DockPanel>
+            <TextBox Name="textBlock" Height="auto" Width="auto"
          ScrollViewer.HorizontalScrollBarVisibility="Auto"
          ScrollViewer.VerticalScrollBarVisibility="Auto"
-         ScrollViewer.CanContentScroll="True" Margin="10,35,10,10"/>
-        <Button Content="Open Log .XML" HorizontalAlignment="Left" Margin="90,10,0,0" VerticalAlignment="Top" Width="auto" Click="Button_OpenXML"/>
-
-
+         ScrollViewer.CanContentScroll="True"/>
+        </DockPanel>
     </Grid>
 </Window>

@@ -56,18 +56,22 @@ namespace LogonAuditor
         }
         public class UserInfoRecord
         {
-            public int LogOnNum = 0;
-            public int LogOffNum = 0;
-            public int[] LogOnHours = new int[24];
-            public int[] LogOffHours = new int[24];            
-            public int[] LogOnDays = new int[7];
-            public int[] LogOffDays = new int[7];
-            public List<DateTime> UnusualLogOns = new List<DateTime>();
-            public List<DateTime> UnusualLogOffs = new List<DateTime>();
+            public LogRecord LogOnEvents = new LogRecord()
+            { logType = "Log on(s)" };
+            public LogRecord LogOffEvents = new LogRecord()
+            { logType = "Log off(s)" };                
             public string userSID;
             public string username;            
         }
-
+        public class LogRecord
+        {
+            public string logType;
+            public int Num = 0;            
+            public int[] Hours = new int[24];            
+            public int[] Days = new int[7];            
+            public List<DateTime> UnusualTimes = new List<DateTime>();            
+        }
+        
         private void getData()
         {
             StringBuilder sb = new StringBuilder();            
@@ -98,6 +102,10 @@ namespace LogonAuditor
                         }
                     }
                     catch { }
+                    if (!eventdetail.TimeCreated.HasValue)
+                    {
+                        continue;
+                    }
                     UserInfoRecord userInfoRecord;                  
                     if (machineInfoObject.userInfoRecords.Where(u => u.userSID == userSID).Count() > 0)
                     {
@@ -108,19 +116,20 @@ namespace LogonAuditor
                         userInfoRecord = new UserInfoRecord
                         {
                             userSID = userSID,
-                            username = username,                        
+                            username = username,
                         };
                         machineInfoObject.userInfoRecords.Add(userInfoRecord);
                     }                    
                     if (eventdetail.Id == 7001)
                     {
-                        evalDateTime(eventdetail, userInfoRecord.LogOnDays, userInfoRecord.LogOnHours, ref userInfoRecord.LogOnNum, userInfoRecord.UnusualLogOns);
+                        evalDateTime(eventdetail, userInfoRecord.LogOnEvents);
                     }
                     else if (eventdetail.Id == 7002)
                     {
-                        evalDateTime(eventdetail, userInfoRecord.LogOffDays, userInfoRecord.LogOffHours, ref userInfoRecord.LogOffNum, userInfoRecord.UnusualLogOffs);
+                        evalDateTime(eventdetail, userInfoRecord.LogOffEvents);
                     }
                 }
+                logReader.Dispose();
             }
             catch (EventLogNotFoundException e)
             {
@@ -153,23 +162,19 @@ namespace LogonAuditor
             }));            
         }
 
-        private void evalDateTime(EventRecord eventdetail, int[] eventDays, int[] eventTimes, ref int eventNum, List<DateTime> UnusualEvents)
-        {
-            if (!eventdetail.TimeCreated.HasValue)
-            {
-                return;
-            }
+        private void evalDateTime(EventRecord eventdetail, LogRecord logRecord)
+        {            
             int day;
             int hour;
             DateTime eventDateTime = eventdetail.TimeCreated.Value;
             hour = eventDateTime.Hour;
-            eventTimes[hour]++;
+            logRecord.Hours[hour]++;
             day = DayOfWeek[eventDateTime.DayOfWeek.ToString()];
-            eventDays[day]++;
-            eventNum++;
+            logRecord.Days[day]++;
+            logRecord.Num++;
             if (hour < 8 || hour > 18 || day == 5 || day == 6)
             {
-                UnusualEvents.Add(eventDateTime);
+                logRecord.UnusualTimes.Add(eventDateTime);
             }
         }
 
@@ -185,50 +190,46 @@ namespace LogonAuditor
                 sb.Append(Environment.NewLine);
                 sb.Append("User SID: " + userInfoRecord.userSID);
                 sb.Append(Environment.NewLine);
-                processUI(userInfoRecord.LogOnHours, userInfoRecord.LogOnDays, userInfoRecord.LogOnNum, userInfoRecord.UnusualLogOns, sb, true);
-                processUI(userInfoRecord.LogOffHours, userInfoRecord.LogOffDays, userInfoRecord.LogOffNum, userInfoRecord.UnusualLogOffs, sb, false);
+                processUI(userInfoRecord.LogOnEvents, sb);
+                processUI(userInfoRecord.LogOffEvents, sb);
             }
         }
 
-        private void processUI(int[] eventTimes, int[] eventDays, int eventNum, List<DateTime> UnusualEvents, StringBuilder sb, bool LogOns)
+        private void processUI(LogRecord logRecord, StringBuilder sb)
         {
             string duration;
-            string eventType = "Log On(s)";
-            if (!LogOns)
-            {
-                eventType = "Log Off(s)";
-            }
+            string eventType = logRecord.logType;            
             sb.Append(eventType + ":");
             sb.Append(Environment.NewLine);
-            sb.Append(eventNum.ToString() + " " + eventType + " (total).");
+            sb.Append(logRecord.Num.ToString() + " " + eventType + " (total).");
             sb.Append(Environment.NewLine);
             sb.Append("Number of " + eventType + " - Hour of " + eventType + ": ");
             sb.Append(Environment.NewLine);
-            for (int i = 0; i < eventTimes.Length; i++)
+            for (int i = 0; i < logRecord.Hours.Length; i++)
             {
-                if (eventTimes[i] > 0)
+                if (logRecord.Hours[i] > 0)
                 {
                     duration = TranslateTime(i);
                     duration += " - " + TranslateTime(i + 1);
-                    sb.Append(eventTimes[i].ToString() + " - " + duration);
+                    sb.Append(logRecord.Hours[i].ToString() + " - " + duration);
                     sb.Append(Environment.NewLine);
                 }
             }
             sb.Append("Number of " + eventType + " - day of the week: ");
             sb.Append(Environment.NewLine);
-            for (int d = 0; d < eventDays.Length; d++)
+            for (int d = 0; d < logRecord.Days.Length; d++)
             {
-                if (eventDays[d] > 0)
+                if (logRecord.Days[d] > 0)
                 {
-                    sb.Append(eventDays[d] + " - " + DayOfWeek.FirstOrDefault(x => x.Value == d).Key);
+                    sb.Append(logRecord.Days[d] + " - " + DayOfWeek.FirstOrDefault(x => x.Value == d).Key);
                     sb.Append(Environment.NewLine);
                 }
             }
-            sb.Append(UnusualEvents.Count().ToString() + " Unusual " + eventType + " (before 8am or after 6pm on weekday or any time on Saturday or Sunday): ");
+            sb.Append(logRecord.UnusualTimes.Count().ToString() + " Unusual " + eventType + " (before 8am or after 6pm on weekday or any time on Saturday or Sunday): ");
             sb.Append(Environment.NewLine);
-            if (UnusualEvents.Count() > 0)
+            if (logRecord.UnusualTimes.Count() > 0)
             {
-                foreach (var UnusualEvent in UnusualEvents)
+                foreach (var UnusualEvent in logRecord.UnusualTimes)
                 {
                     sb.Append(UnusualEvent.ToLongTimeString() + " - " + UnusualEvent.ToLongDateString());
                     sb.Append(Environment.NewLine);
