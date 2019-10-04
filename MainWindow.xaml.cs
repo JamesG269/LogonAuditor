@@ -67,8 +67,8 @@ namespace LogonAuditor
         public class LogRecord
         {
             public bool AllLogOn;
-            public bool NormalLogOn;
-            public bool UnusualLogOn;
+            public bool NormalLogOn { get; set; }
+            public bool UnusualLogOn { get; set; }
             public bool FailedLogOn;
             public bool NormalLogOff;
             public bool UnusualLogOff;            
@@ -222,10 +222,10 @@ namespace LogonAuditor
                         };
                         machineInfoObject.userInfoRecords.Add(userInfoRecord);
                     }
-                }                
+                }
+                SaveFirstLast(eventDetail, userInfoRecord);
                 if (eventDetail.Id == 7001)
-                {                    
-                    SaveFirstLast(eventDetail, userInfoRecord);
+                {                                        
                     evalDateTime(eventDetail, userInfoRecord);
                 }
                 else if (eventDetail.Id == 7002)
@@ -535,49 +535,6 @@ namespace LogonAuditor
             xmlLogDir = Path.Combine(appDir, "LogonAuditorLogs");
             Get45PlusFromRegistry();
         }
-
-        private void UserInfoListBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
-        {                        
-            if (UserInfoListBox.SelectedItems.Count > 0)
-            {
-                List<UserInfoRecord> userInfoRecords = UserInfoListBox.SelectedItems.OfType<UserInfoRecord>().ToList();
-                List<LogRecord> AllLogOnRecords = new List<LogRecord>();
-                List<LogRecord> NormalLogOnRecords = new List<LogRecord>();
-                List<LogRecord> UnusualLogOnRecords = new List<LogRecord>();
-                List<LogRecord> FailedLogOnRecords = new List<LogRecord>();
-                foreach (var userInfoRecord in userInfoRecords)
-                {
-                    foreach (var logRecord in userInfoRecord.LogOns)
-                    {
-                        if (logRecord.AllLogOn == true)
-                        {                            
-                            AllLogOnRecords.Add(logRecord);
-                        }
-                        if (logRecord.NormalLogOn == true)
-                        {
-                            NormalLogOnRecords.Add(logRecord);
-                        }
-                        if (logRecord.UnusualLogOn == true)
-                        {
-                            UnusualLogOnRecords.Add(logRecord);
-                        }
-                        if (logRecord.FailedLogOn == true)
-                        {
-                            FailedLogOnRecords.Add(logRecord);
-                        }
-                    }
-                }
-                AllLogonsListBox.ItemsSource = AllLogOnRecords;
-                AllLogonsListBox.Items.Refresh();
-                NormalLogonsListBox.ItemsSource = NormalLogOnRecords;
-                NormalLogonsListBox.Items.Refresh();
-                UnusualLogonsListBox.ItemsSource = UnusualLogOnRecords;
-                UnusualLogonsListBox.Items.Refresh();
-                FailedLogonsListBox.ItemsSource = FailedLogOnRecords;
-                FailedLogonsListBox.Items.Refresh();
-            }
-        }
-
 
         public void Get45PlusFromRegistry()
         {

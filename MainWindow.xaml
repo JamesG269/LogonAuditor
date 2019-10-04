@@ -15,7 +15,7 @@
             </DockPanel>
             <TabControl>
                 <TabItem Header="Data View">
-                    <Grid>
+                    <Grid x:Name="updateGrid">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="1*"/>
                             <RowDefinition Height="1*"/>
@@ -25,8 +25,8 @@
                                 <GridView>
                                     <GridViewColumn Header="Username" DisplayMemberBinding="{Binding username}"/>
                                     <GridViewColumn Header="User SID" DisplayMemberBinding="{Binding userSID}"/>
-                                    <GridViewColumn Header="First Log On" DisplayMemberBinding="{Binding FirstLogOn}"/>
-                                    <GridViewColumn Header="Last Log On" DisplayMemberBinding="{Binding LastLogOn}"/>
+                                    <GridViewColumn Header="First Event" DisplayMemberBinding="{Binding FirstLogOn}"/>
+                                    <GridViewColumn Header="Last Event" DisplayMemberBinding="{Binding LastLogOn}"/>
                                     <GridViewColumn Header="Total Log Ons" DisplayMemberBinding="{Binding LogOnsNum}"/>
                                     <GridViewColumn Header="Normal Log Ons" DisplayMemberBinding="{Binding NormalLogOnsNum}"/>
                                     <GridViewColumn Header="Unusual Log Ons" DisplayMemberBinding="{Binding UnusualLogOnsNum}"/>
@@ -38,21 +38,22 @@
                             <TabItem Header="All Log Ons">
                                 <ListView x:Name="AllLogonsListBox">
                                     <ListView.View>
-                                        <GridView>
+                                        <GridView x:Name="AllLogonsGrid">
                                             <GridViewColumn Header="Username" DisplayMemberBinding="{Binding username}"/>
                                             <GridViewColumn Header="Log On" DisplayMemberBinding="{Binding LogOnDateTime}"/>
                                             <GridViewColumn Header="Log Off" DisplayMemberBinding="{Binding LogOffDateTime}"/>
                                             <GridViewColumn Header="Desktop" DisplayMemberBinding="{Binding desktopName}"/>
                                             <GridViewColumn Header="Network Address" DisplayMemberBinding="{Binding networkAddress}"/>
+                                            <GridViewColumn Header="Normal Log On" DisplayMemberBinding="{Binding NormalLogOn}"/>
+                                            <GridViewColumn Header="Unusual Log On" DisplayMemberBinding="{Binding UnusualLogOn}"/>
                                         </GridView>
                                     </ListView.View>
                                 </ListView>
-                                          
                             </TabItem>
                             <TabItem Header="Normal Log Ons">
                                 <ListView x:Name="NormalLogonsListBox">
                                     <ListView.View>
-                                        <GridView>
+                                        <GridView x:Name="NormalLogonsGrid">
                                             <GridViewColumn Header="Username" DisplayMemberBinding="{Binding username}"/>
                                             <GridViewColumn Header="Log On" DisplayMemberBinding="{Binding LogOnDateTime}"/>
                                             <GridViewColumn Header="Log Off" DisplayMemberBinding="{Binding LogOffDateTime}"/>
@@ -65,7 +66,7 @@
                             <TabItem Header="Unusual Log Ons">
                                 <ListView x:Name="UnusualLogonsListBox">
                                     <ListView.View>
-                                        <GridView>
+                                        <GridView x:Name="UnusualLogonsGrid">
                                             <GridViewColumn Header="Username" DisplayMemberBinding="{Binding username}"/>
                                             <GridViewColumn Header="Log On" DisplayMemberBinding="{Binding LogOnDateTime}"/>
                                             <GridViewColumn Header="Log Off" DisplayMemberBinding="{Binding LogOffDateTime}"/>
@@ -78,7 +79,7 @@
                             <TabItem Header="Failed Log Ons">
                                 <ListView x:Name="FailedLogonsListBox">
                                     <ListView.View>
-                                        <GridView>
+                                        <GridView x:Name="FailedLogonsGrid">
                                             <GridViewColumn Header="Username" DisplayMemberBinding="{Binding username}"/>
                                             <GridViewColumn Header="Log On" DisplayMemberBinding="{Binding LogOnDateTime}"/>
                                             <GridViewColumn Header="Log Off" DisplayMemberBinding="{Binding LogOffDateTime}"/>
