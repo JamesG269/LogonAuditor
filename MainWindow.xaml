@@ -13,10 +13,97 @@
                 <Button Content="Start" Click="Button_Click" Width="100" HorizontalAlignment="Left"/>
                 <Button Content="Open Log .XML" Click="Button_OpenXML" Width="100" HorizontalAlignment="Left"/>
             </DockPanel>
+            <TabControl>
+                <TabItem Header="Data View">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="1*"/>
+                            <RowDefinition Height="1*"/>
+                        </Grid.RowDefinitions>
+                        <ListView Grid.Row="0" x:Name="UserInfoListBox" SelectionChanged="UserInfoListBox_SelectionChanged">
+                            <ListView.View>
+                                <GridView>
+                                    <GridViewColumn Header="Username" DisplayMemberBinding="{Binding username}"/>
+                                    <GridViewColumn Header="User SID" DisplayMemberBinding="{Binding userSID}"/>
+                                    <GridViewColumn Header="First Log On" DisplayMemberBinding="{Binding FirstLogOn}"/>
+                                    <GridViewColumn Header="Last Log On" DisplayMemberBinding="{Binding LastLogOn}"/>
+                                    <GridViewColumn Header="Total Log Ons" DisplayMemberBinding="{Binding LogOnsNum}"/>
+                                    <GridViewColumn Header="Normal Log Ons" DisplayMemberBinding="{Binding NormalLogOnsNum}"/>
+                                    <GridViewColumn Header="Unusual Log Ons" DisplayMemberBinding="{Binding UnusualLogOnsNum}"/>
+                                    <GridViewColumn Header="Failed Log Ons" DisplayMemberBinding="{Binding FailedLogOnsNum}"/>
+                                </GridView>
+                            </ListView.View>
+                        </ListView>
+                        <TabControl Grid.Row="1">
+                            <TabItem Header="All Log Ons">
+                                <ListView x:Name="AllLogonsListBox">
+                                    <ListView.View>
+                                        <GridView>
+                                            <GridViewColumn Header="Username" DisplayMemberBinding="{Binding username}"/>
+                                            <GridViewColumn Header="Log On" DisplayMemberBinding="{Binding LogOnDateTime}"/>
+                                            <GridViewColumn Header="Log Off" DisplayMemberBinding="{Binding LogOffDateTime}"/>
+                                            <GridViewColumn Header="Desktop" DisplayMemberBinding="{Binding desktopName}"/>
+                                            <GridViewColumn Header="Network Address" DisplayMemberBinding="{Binding networkAddress}"/>
+                                        </GridView>
+                                    </ListView.View>
+                                </ListView>
+                                          
+                            </TabItem>
+                            <TabItem Header="Normal Log Ons">
+                                <ListView x:Name="NormalLogonsListBox">
+                                    <ListView.View>
+                                        <GridView>
+                                            <GridViewColumn Header="Username" DisplayMemberBinding="{Binding username}"/>
+                                            <GridViewColumn Header="Log On" DisplayMemberBinding="{Binding LogOnDateTime}"/>
+                                            <GridViewColumn Header="Log Off" DisplayMemberBinding="{Binding LogOffDateTime}"/>
+                                            <GridViewColumn Header="Desktop" DisplayMemberBinding="{Binding desktopName}"/>
+                                            <GridViewColumn Header="Network Address" DisplayMemberBinding="{Binding networkAddress}"/>
+                                        </GridView>
+                                    </ListView.View>
+                                </ListView>
+                            </TabItem>
+                            <TabItem Header="Unusual Log Ons">
+                                <ListView x:Name="UnusualLogonsListBox">
+                                    <ListView.View>
+                                        <GridView>
+                                            <GridViewColumn Header="Username" DisplayMemberBinding="{Binding username}"/>
+                                            <GridViewColumn Header="Log On" DisplayMemberBinding="{Binding LogOnDateTime}"/>
+                                            <GridViewColumn Header="Log Off" DisplayMemberBinding="{Binding LogOffDateTime}"/>
+                                            <GridViewColumn Header="Desktop" DisplayMemberBinding="{Binding desktopName}"/>
+                                            <GridViewColumn Header="Network Address" DisplayMemberBinding="{Binding networkAddress}"/>
+                                        </GridView>
+                                    </ListView.View>
+                                </ListView>
+                            </TabItem>
+                            <TabItem Header="Failed Log Ons">
+                                <ListView x:Name="FailedLogonsListBox">
+                                    <ListView.View>
+                                        <GridView>
+                                            <GridViewColumn Header="Username" DisplayMemberBinding="{Binding username}"/>
+                                            <GridViewColumn Header="Log On" DisplayMemberBinding="{Binding LogOnDateTime}"/>
+                                            <GridViewColumn Header="Log Off" DisplayMemberBinding="{Binding LogOffDateTime}"/>
+                                            <GridViewColumn Header="Desktop" DisplayMemberBinding="{Binding desktopName}"/>
+                                            <GridViewColumn Header="Network Address" DisplayMemberBinding="{Binding networkAddress}"/>
+                                        </GridView>
+                                    </ListView.View>
+                                </ListView>
+                            </TabItem>
+                            <TabItem Header="Hours">
+                                <ListBox x:Name="HoursListBox"/>
+                            </TabItem>
+                            <TabItem Header="Days">
+                                <ListBox x:Name="DaysListBox"/>
+                            </TabItem>
+                        </TabControl>
+                    </Grid>
+                </TabItem>
+                    <TabItem Header="Text View">
             <TextBox Name="textBlock" Height="auto" Width="auto"
          ScrollViewer.HorizontalScrollBarVisibility="Auto"
          ScrollViewer.VerticalScrollBarVisibility="Auto"
          ScrollViewer.CanContentScroll="True"/>
+                </TabItem>
+            </TabControl>
         </DockPanel>
     </Grid>
 </Window>

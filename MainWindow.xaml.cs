@@ -13,7 +13,7 @@ using System.Windows.Threading;
 using System.IO;
 using System.Xml.Serialization;
 using Microsoft.Win32;
-
+using System.Windows.Controls;
 
 namespace LogonAuditor
 {
@@ -38,17 +38,6 @@ namespace LogonAuditor
         {
             InitializeComponent();
         }
-        private void Button_Click(object sender, RoutedEventArgs e)
-        {
-            if (0 != Interlocked.Exchange(ref OneInt, 1))
-            {
-                return;
-            }
-            textBlock.Clear();
-            textBlock.Text += "Querying Log Ons & Log offs ...";
-            textBlock.Text += Environment.NewLine;
-            Task.Factory.StartNew(() => getData());
-        }
         public class MachineInfo
         {
             public string machineName;
@@ -56,60 +45,173 @@ namespace LogonAuditor
         }
         public class UserInfoRecord
         {
-            public LogRecord LogOnEvents = new LogRecord()
-            { logType = "Log on(s)" };
-            public LogRecord LogOffEvents = new LogRecord()
-            { logType = "Log off(s)" };
-            public string userSID;
-            public string username;
-        }
+            public string userSID { get; set; }
+            public string username { get; set; }
+            public int LogOnsNum { get; set; }
+            public int NormalLogOnsNum { get; set; }
+            public int UnusualLogOnsNum { get; set; }
+            public int FailedLogOnsNum { get; set; }
+            public int LogOffsNum { get; set; }
+            public int NormalLogOffsNum { get; set; }
+            public int UnusualLogOffsNum { get; set; }
+            public DateTime? FirstLogOn { get; set; }
+            public DateTime? LastLogOn { get; set; }
+            public int[] LogOnHours = new int[24];
+            public int[] LogOnDays = new int[7];
+            public int[] LogOffHours = new int[24];
+            public int[] LogOffDays = new int[7];
+            public int[] FailedLogOnHours = new int[24];
+            public int[] FailedLogOnDays = new int[7];
+            public List<LogRecord> LogOns = new List<LogRecord>();                      
+        }        
         public class LogRecord
         {
-            public string logType;
-            public int Num = 0;
-            public int[] Hours = new int[24];
-            public int[] Days = new int[7];
-            public List<DateTime> UnusualTimes = new List<DateTime>();
+            public bool AllLogOn;
+            public bool NormalLogOn;
+            public bool UnusualLogOn;
+            public bool FailedLogOn;
+            public bool NormalLogOff;
+            public bool UnusualLogOff;            
+            public DateTime LogOnDateTime { get; set; }
+            public DateTime LogOffDateTime { get; set; }
+            public string networkAddress { get; set; }
+            public string desktopName { get; set; }
+            public string username { get; set; }
         }
-
-        private void getData()
+        private async void Button_Click(object sender, RoutedEventArgs e)
         {
-            StringBuilder sb = new StringBuilder();
-            Thread.CurrentThread.CurrentCulture = new CultureInfo("en-US");
+            if (0 != Interlocked.Exchange(ref OneInt, 1))
+            {
+                return;
+            }
+            textBlock.Clear();
             MachineInfo machineInfoObject = new MachineInfo
             {
                 machineName = Environment.MachineName
             };
-            string query = "*";
-            EventLogQuery eventsQuery = new EventLogQuery("system", PathType.LogName, query);
+            string updateText = await Task.Run(() => getData(machineInfoObject));
+            UserInfoListBox.ItemsSource = machineInfoObject.userInfoRecords;
+            UserInfoListBox.Items.Refresh();
+            textBlock.Text += updateText;                     
+            Interlocked.Exchange(ref OneInt, 0);
+        }        
+        private string getData(MachineInfo machineInfoObject)
+        {
+            StringBuilder sb = new StringBuilder();
+            Thread.CurrentThread.CurrentCulture = new CultureInfo("en-US");
+            
+            EventLogQuery eventsQuery;
+            EventLogReader logReader;
             try
             {
-                EventLogReader logReader = new EventLogReader(eventsQuery);
-                for (EventRecord eventDetail = logReader.ReadEvent(); eventDetail != null; eventDetail = logReader.ReadEvent())
+                int num = 0;
+                eventsQuery = new EventLogQuery("system", PathType.LogName, "*");
+                logReader = new EventLogReader(eventsQuery);
+                processEventLog(machineInfoObject, logReader, ref num);
+                eventsQuery = new EventLogQuery("security", PathType.LogName, "*");
+                logReader = new EventLogReader(eventsQuery);
+                processEventLog(machineInfoObject, logReader, ref num);
+            }
+            catch
+            {
+                MessageBox.Show("Error reading Event log.");
+                return sb.ToString();
+            }
+            if (logReader != null)
+            {
+                logReader.Dispose();
+            }
+            sb.Append(Environment.NewLine);
+            sb.Append("Queries complete.");
+            sb.Append(Environment.NewLine);
+            string xmlFilePath = saveToXML(machineInfoObject);
+            sb.Append("Data logged to: " + xmlFilePath);
+            sb.Append(Environment.NewLine);
+            addUserInfoToSB(machineInfoObject, sb);
+            return sb.ToString();
+        }
+
+        private void processEventLog(MachineInfo machineInfoObject, EventLogReader logReader, ref int num)
+        {
+            EventRecord eventDetail;
+            int temp;    
+            while (true)
+            {
+                eventDetail = logReader.ReadEvent();
+                if (eventDetail == null)
                 {
-                    if (eventDetail.Id != 7001 && eventDetail.Id != 7002)
-                    {
-                        continue;
-                    }
-                    if (!eventDetail.TimeCreated.HasValue)
-                    {
-                        continue;
-                    }
-                    string userSID = eventDetail.Properties[1].Value.ToString();
-                    string username = "Could not translate SID to username";
+                    break;
+                }
+                if (eventDetail.Id != 7001 && eventDetail.Id != 7002 && eventDetail.Id != 4625)
+                {
+                    continue;
+                }
+                if (!eventDetail.TimeCreated.HasValue)
+                {
+                    continue;
+                }
+                string userSID;
+                string username;
+                UserInfoRecord userInfoRecord;
+                if (eventDetail.Id != 4625)
+                {
+                    userSID = eventDetail.Properties[1].Value.ToString();                    
                     try
                     {
                         SecurityIdentifier s = new SecurityIdentifier(userSID);
-                        if (s.IsAccountSid())
+                        username = s.Translate(typeof(NTAccount)).Value;
+                        if (username.IndexOf(@"\") != -1)
                         {
-                            username = s.Translate(typeof(NTAccount)).Value;
+                            username = username.Substring(username.IndexOf(@"\") + 1);
+                        }
+                        if (machineInfoObject.userInfoRecords.Where(u => u.username == username).Count() > 0)
+                        {
+                            userInfoRecord = machineInfoObject.userInfoRecords.Where(u => u.username == username).FirstOrDefault();
+                        }
+                        else
+                        {
+                            userInfoRecord = new UserInfoRecord
+                            {
+                                userSID = userSID,
+                                username = username,
+                            };
+                            machineInfoObject.userInfoRecords.Add(userInfoRecord);
                         }
                     }
-                    catch { }
-                    UserInfoRecord userInfoRecord;
-                    if (machineInfoObject.userInfoRecords.Where(u => u.userSID == userSID).Count() > 0)
+                    catch
                     {
-                        userInfoRecord = machineInfoObject.userInfoRecords.Where(u => u.userSID == userSID).FirstOrDefault();
+                        username = "NULL";
+                        if (machineInfoObject.userInfoRecords.Where(u => u.userSID == userSID).Count() > 0)
+                        {
+                            userInfoRecord = machineInfoObject.userInfoRecords.Where(u => u.userSID == userSID).FirstOrDefault();
+                        }
+                        else
+                        {
+                            userInfoRecord = new UserInfoRecord
+                            {
+                                userSID = userSID,
+                                username = username,
+                            };
+                            machineInfoObject.userInfoRecords.Add(userInfoRecord);
+                        }
+                    }                    
+                }
+                else
+                {
+                    username = eventDetail.Properties[5].Value.ToString();
+                    try
+                    {
+                        var account = new NTAccount(username);                        
+                        var sid = (SecurityIdentifier)account.Translate(typeof(SecurityIdentifier));
+                        userSID = sid.ToString();
+                    }
+                    catch
+                    {
+                        userSID = "NULL";
+                    }
+                    if (machineInfoObject.userInfoRecords.Where(u => u.username == username).Count() > 0)
+                    {
+                        userInfoRecord = machineInfoObject.userInfoRecords.Where(u => u.username == username).FirstOrDefault();
                     }
                     else
                     {
@@ -120,34 +222,56 @@ namespace LogonAuditor
                         };
                         machineInfoObject.userInfoRecords.Add(userInfoRecord);
                     }
-                    if (eventDetail.Id == 7001)
-                    {
-                        evalDateTime(eventDetail, userInfoRecord.LogOnEvents);
-                    }
-                    else if (eventDetail.Id == 7002)
-                    {
-                        evalDateTime(eventDetail, userInfoRecord.LogOffEvents);
-                    }
+                }                
+                if (eventDetail.Id == 7001)
+                {                    
+                    SaveFirstLast(eventDetail, userInfoRecord);
+                    evalDateTime(eventDetail, userInfoRecord);
                 }
-                logReader.Dispose();
+                else if (eventDetail.Id == 7002)
+                {
+                    evalDateTime(eventDetail, userInfoRecord);
+                }
+                else if (eventDetail.Id == 4625)
+                {                    
+                    evalDateTime(eventDetail, userInfoRecord);
+                }
+                num++;
+                if (num % 100 == 0)
+                {
+                    temp = num;
+                    Application.Current.Dispatcher.Invoke(new Action(() => { textBlock.Clear(); textBlock.Text = temp.ToString() + " events processed."; }));
+                    
+                }
             }
-            catch (EventLogNotFoundException e)
+            temp = num;
+            Application.Current.Dispatcher.Invoke(new Action(() => { textBlock.Clear(); textBlock.Text = temp.ToString() + " events processed."; }));
+        }
+
+        private static void SaveFirstLast(EventRecord eventDetail, UserInfoRecord userInfoRecord)
+        {
+            if (userInfoRecord.FirstLogOn.HasValue)
             {
-                MessageBox.Show("Error reading event log: " + e.InnerException.Message);
-                Interlocked.Exchange(ref OneInt, 0);
-                return;
+                if (userInfoRecord.FirstLogOn.Value > eventDetail.TimeCreated.Value)
+                {
+                    userInfoRecord.FirstLogOn = eventDetail.TimeCreated;
+                }
             }
-            string xmlFilePath = saveToXML(machineInfoObject);
-            sb.Append("Data logged to: " + xmlFilePath);
-            sb.Append(Environment.NewLine);
-            addUserInfoToSB(machineInfoObject, sb);
-            Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() =>
+            else
             {
-                textBlock.Text += "Queries complete.";
-                textBlock.Text += Environment.NewLine;
-                textBlock.Text += sb.ToString();
-                Interlocked.Exchange(ref OneInt, 0);
-            }));
+                userInfoRecord.FirstLogOn = eventDetail.TimeCreated;
+            }
+            if (userInfoRecord.LastLogOn.HasValue)
+            {
+                if (userInfoRecord.LastLogOn.Value < eventDetail.TimeCreated.Value)
+                {
+                    userInfoRecord.LastLogOn = eventDetail.TimeCreated;
+                }
+            }
+            else
+            {
+                userInfoRecord.LastLogOn = eventDetail.TimeCreated;
+            }
         }
 
         private string saveToXML(MachineInfo machineInfoObject)
@@ -167,40 +291,141 @@ namespace LogonAuditor
             return xmlFilePath;
         }
 
-        private void evalDateTime(EventRecord eventdetail, LogRecord logRecord)
-        {
+        private void evalDateTime(EventRecord eventdetail, UserInfoRecord userInfoRecord) // get desktop and network address for log on and log off.
+        {            
             DateTime eventDateTime = eventdetail.TimeCreated.Value;
             int hour = eventDateTime.Hour;
             int day = DayOfWeek[eventDateTime.DayOfWeek.ToString()];
-            logRecord.Hours[hour]++;
-            logRecord.Days[day]++;
-            logRecord.Num++;
-            if (hour < 8 || hour > 18 || day == 5 || day == 6)
+            if (eventdetail.Id == 7001)
             {
-                logRecord.UnusualTimes.Add(eventDateTime);
+                LogRecord logRecord = new LogRecord();
+                logRecord.desktopName = eventdetail.MachineName;
+                logRecord.username = userInfoRecord.username;
+                userInfoRecord.LogOnHours[hour]++;
+                userInfoRecord.LogOnDays[day]++;
+                userInfoRecord.LogOnsNum++;                
+                if (CheckIfUnusual(hour, day))
+                {
+                    userInfoRecord.UnusualLogOnsNum++;
+                    logRecord.UnusualLogOn = true;                    
+                }
+                else
+                {
+                    userInfoRecord.NormalLogOnsNum++;
+                    logRecord.NormalLogOn = true;
+                }
+                logRecord.AllLogOn = true;
+                logRecord.LogOnDateTime = eventdetail.TimeCreated.Value;
+                userInfoRecord.LogOns.Add(logRecord);
             }
+            else if (eventdetail.Id == 7002)
+            {
+                if (userInfoRecord.LogOns.Count() == 0)
+                {
+                    return;
+                }
+                LogRecord logRecord = userInfoRecord.LogOns.Last();                
+                userInfoRecord.LogOffHours[hour]++;
+                userInfoRecord.LogOffDays[day]++;                
+                logRecord.LogOffDateTime = eventdetail.TimeCreated.Value;
+                if (CheckIfUnusual(hour, day))
+                {
+                    userInfoRecord.UnusualLogOffsNum++;
+                    logRecord.UnusualLogOff = true;
+                }
+                else
+                {
+                    userInfoRecord.NormalLogOffsNum++;
+                    logRecord.NormalLogOff = true;
+                }
+            }
+            else if (eventdetail.Id == 4625)
+            {
+                userInfoRecord.FailedLogOnHours[hour]++;
+                userInfoRecord.FailedLogOnDays[day]++;
+                userInfoRecord.FailedLogOnsNum++;
+                LogRecord logRecord = new LogRecord();
+                logRecord.username = userInfoRecord.username;
+                logRecord.FailedLogOn = true;
+                logRecord.LogOnDateTime = eventdetail.TimeCreated.Value;
+                logRecord.LogOffDateTime = eventdetail.TimeCreated.Value;
+                logRecord.networkAddress = eventdetail.Properties[19].Value.ToString();
+                logRecord.desktopName = eventdetail.Properties[1].Value.ToString();
+                userInfoRecord.LogOns.Add(logRecord);
+            }
+        }
+
+        private static bool CheckIfUnusual(int hour, int day)
+        {
+            if (hour < 7 || hour > 18 || day == 5 || day == 6)
+            {
+                return true;
+            }
+            return false;
         }
 
         private void addUserInfoToSB(MachineInfo machineInfoObject, StringBuilder sb)
         {
+            /*
             sb.Append(Environment.NewLine);
             sb.Append("Machine name: " + machineInfoObject.machineName);
             sb.Append(Environment.NewLine);
             foreach (var userInfoRecord in machineInfoObject.userInfoRecords)
             {
+                if (userInfoRecord.LogOnsNum == 0)
+                {
+                    continue;
+                }
                 sb.Append(Environment.NewLine);
                 sb.Append("Username: " + userInfoRecord.username);
                 sb.Append(Environment.NewLine);
                 sb.Append("User SID: " + userInfoRecord.userSID);
                 sb.Append(Environment.NewLine);
+                sb.Append("First Log On: ");
+                if (userInfoRecord.FirstLogOn.HasValue)
+                {
+                    sb.Append(userInfoRecord.FirstLogOn.Value.ToLongTimeString() + " - " + userInfoRecord.FirstLogOn.Value.ToLongDateString());
+                }
+                else
+                {
+                    sb.Append("NULL");
+                }
+                sb.Append(Environment.NewLine);
+                sb.Append("Last Log On: ");
+                if (userInfoRecord.LastLogOn.HasValue)
+                {
+                    sb.Append(userInfoRecord.LastLogOn.Value.ToLongTimeString() + " - " + userInfoRecord.LastLogOn.Value.ToLongDateString());
+                }
+                else
+                {
+                    sb.Append("NULL");
+                }
+                sb.Append(Environment.NewLine);
                 processUI(userInfoRecord.LogOnEvents, sb);
-                processUI(userInfoRecord.LogOffEvents, sb);
+                processUI(userInfoRecord.LogOffEvents, sb);                            
             }
+            sb.Append(Environment.NewLine);
+            foreach (var userInfoRecord in machineInfoObject.userInfoRecords)
+            {
+                if (userInfoRecord.FailedLogOns.Count() == 0)
+                {
+                    continue;
+                }
+                sb.Append(userInfoRecord.FailedLogOns.Count() + " Failed Log Ons for username " + userInfoRecord.username + ":");
+                sb.Append(Environment.NewLine);
+                foreach (var failedLogon in userInfoRecord.FailedLogOns)
+                {
+                    sb.Append("Failed Logon, for user " + userInfoRecord.username + ": " + failedLogon.dateTime.ToLongTimeString() + " - " + failedLogon.dateTime.ToLongDateString() + " from network address: " + failedLogon.networkAddress + " (" + failedLogon.desktopName + ")" );
+                    sb.Append(Environment.NewLine);
+                }
+                sb.Append(Environment.NewLine);
+            }
+            */
         }
 
         private void processUI(LogRecord logRecord, StringBuilder sb)
         {
-            string duration;
+            /*
             string eventType = logRecord.logType;
             sb.Append(eventType + ":");
             sb.Append(Environment.NewLine);
@@ -212,8 +437,7 @@ namespace LogonAuditor
             {
                 if (logRecord.Hours[i] > 0)
                 {
-                    duration = TranslateTime(i);
-                    duration += " - " + TranslateTime(i + 1);
+                    string duration = TranslateTime(i) + " - " + TranslateTime(i + 1);
                     sb.Append(logRecord.Hours[i].ToString() + " - " + duration);
                     sb.Append(Environment.NewLine);
                 }
@@ -228,16 +452,14 @@ namespace LogonAuditor
                     sb.Append(Environment.NewLine);
                 }
             }
-            sb.Append(logRecord.UnusualTimes.Count().ToString() + " Unusual " + eventType + " (before 8am or after 6pm on weekday or any time on Saturday or Sunday): ");
+            sb.Append(logRecord.UnusualTimes.Count().ToString() + " Unusual " + eventType + " (before 7am or after 6pm on weekday or any time on Saturday or Sunday): ");
             sb.Append(Environment.NewLine);
-            if (logRecord.UnusualTimes.Count() > 0)
+            foreach (var UnusualEvent in logRecord.UnusualTimes)
             {
-                foreach (var UnusualEvent in logRecord.UnusualTimes)
-                {
-                    sb.Append(UnusualEvent.ToLongTimeString() + " - " + UnusualEvent.ToLongDateString());
-                    sb.Append(Environment.NewLine);
-                }
+                sb.Append(UnusualEvent.ToLongTimeString() + " - " + UnusualEvent.ToLongDateString());
+                sb.Append(Environment.NewLine);
             }
+            */
         }
 
         private string TranslateTime(int hour)
@@ -263,18 +485,12 @@ namespace LogonAuditor
             return time;
         }
 
-        private void Button_OpenXML(object sender, RoutedEventArgs e)
+        private async void Button_OpenXML(object sender, RoutedEventArgs e)
         {
             if (0 != Interlocked.Exchange(ref OneInt, 1))
             {
                 return;
             }
-            textBlock.Clear();
-            Task.Factory.StartNew(() => OpenXML());
-        }
-        private void OpenXML()
-        {
-            StringBuilder sb = new StringBuilder();
             OpenFileDialog openFileDialog = new OpenFileDialog();
             if (Directory.Exists(xmlLogDir))
             {
@@ -285,27 +501,32 @@ namespace LogonAuditor
                 return;
             }
             xmlLogDir = Path.GetDirectoryName(openFileDialog.FileName);
-            string fileName = openFileDialog.FileName;
-            Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() =>
-            {
-                textBlock.Text = "Loading data from: " + fileName;
-                textBlock.Text += Environment.NewLine;
-            }));
+            string fileName = openFileDialog.FileName;            
+            textBlock.Text = "Loading data from: " + fileName;
+            textBlock.Text += Environment.NewLine;
+            StringBuilder sb = new StringBuilder();
+            MachineInfo machineInfoFromXML = new MachineInfo();
+            string retStr;
+            (retStr, machineInfoFromXML) = await Task.Run(() => OpenXML(fileName, machineInfoFromXML));
+            textBlock.Text += retStr;
+            UserInfoListBox.ItemsSource = machineInfoFromXML.userInfoRecords;
+            UserInfoListBox.Items.Refresh();
+            Interlocked.Exchange(ref OneInt, 0);
+        }
+        
+        private (string, MachineInfo) OpenXML(string fileName, MachineInfo machineInfoFromXML)
+        {
+            StringBuilder sb = new StringBuilder();
             XmlSerializer serializer = new XmlSerializer(typeof(MachineInfo));
             if (File.Exists(fileName))
             {
                 using (StreamReader streamReader = new StreamReader(fileName))
-                {
-                    MachineInfo machineInfoFromXML = new MachineInfo();
+                {                    
                     machineInfoFromXML = (MachineInfo)serializer.Deserialize(streamReader);
                     addUserInfoToSB(machineInfoFromXML, sb);
                 }
             }
-            Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() =>
-            {
-                textBlock.Text += sb.ToString();
-                Interlocked.Exchange(ref OneInt, 0);
-            }));
+            return (sb.ToString(), machineInfoFromXML);
         }
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
@@ -314,6 +535,49 @@ namespace LogonAuditor
             xmlLogDir = Path.Combine(appDir, "LogonAuditorLogs");
             Get45PlusFromRegistry();
         }
+
+        private void UserInfoListBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {                        
+            if (UserInfoListBox.SelectedItems.Count > 0)
+            {
+                List<UserInfoRecord> userInfoRecords = UserInfoListBox.SelectedItems.OfType<UserInfoRecord>().ToList();
+                List<LogRecord> AllLogOnRecords = new List<LogRecord>();
+                List<LogRecord> NormalLogOnRecords = new List<LogRecord>();
+                List<LogRecord> UnusualLogOnRecords = new List<LogRecord>();
+                List<LogRecord> FailedLogOnRecords = new List<LogRecord>();
+                foreach (var userInfoRecord in userInfoRecords)
+                {
+                    foreach (var logRecord in userInfoRecord.LogOns)
+                    {
+                        if (logRecord.AllLogOn == true)
+                        {                            
+                            AllLogOnRecords.Add(logRecord);
+                        }
+                        if (logRecord.NormalLogOn == true)
+                        {
+                            NormalLogOnRecords.Add(logRecord);
+                        }
+                        if (logRecord.UnusualLogOn == true)
+                        {
+                            UnusualLogOnRecords.Add(logRecord);
+                        }
+                        if (logRecord.FailedLogOn == true)
+                        {
+                            FailedLogOnRecords.Add(logRecord);
+                        }
+                    }
+                }
+                AllLogonsListBox.ItemsSource = AllLogOnRecords;
+                AllLogonsListBox.Items.Refresh();
+                NormalLogonsListBox.ItemsSource = NormalLogOnRecords;
+                NormalLogonsListBox.Items.Refresh();
+                UnusualLogonsListBox.ItemsSource = UnusualLogOnRecords;
+                UnusualLogonsListBox.Items.Refresh();
+                FailedLogonsListBox.ItemsSource = FailedLogOnRecords;
+                FailedLogonsListBox.Items.Refresh();
+            }
+        }
+
 
         public void Get45PlusFromRegistry()
         {
