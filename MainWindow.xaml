@@ -90,10 +90,24 @@
                                 </ListView>
                             </TabItem>
                             <TabItem Header="Hours">
-                                <ListBox x:Name="HoursListBox"/>
+                                <ListView x:Name="HoursListBox">
+                                    <ListView.View>
+                                        <GridView x:Name="HoursGrid">
+                                            <GridViewColumn Header="Hour" DisplayMemberBinding="{Binding FriendlyName}"/>
+                                            <GridViewColumn Header="Log Ons" DisplayMemberBinding="{Binding Num}"/>
+                                        </GridView>
+                                    </ListView.View>
+                                </ListView>
                             </TabItem>
                             <TabItem Header="Days">
-                                <ListBox x:Name="DaysListBox"/>
+                                <ListView x:Name="DaysListBox">
+                                <ListView.View>
+                                    <GridView x:Name="DaysGrid">
+                                         <GridViewColumn Header="Day" DisplayMemberBinding="{Binding FriendlyName}"/>
+                                         <GridViewColumn Header="Log Ons" DisplayMemberBinding="{Binding Num}"/>
+                                    </GridView>
+                                </ListView.View>
+                                </ListView>
                             </TabItem>
                         </TabControl>
                     </Grid>

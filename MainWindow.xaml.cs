@@ -94,7 +94,7 @@ namespace LogonAuditor
             UserInfoListBox.Items.Refresh();
             textBlock.Text += updateText;                     
             Interlocked.Exchange(ref OneInt, 0);
-        }        
+        }                
         private string getData(MachineInfo machineInfoObject)
         {
             StringBuilder sb = new StringBuilder();
@@ -164,9 +164,9 @@ namespace LogonAuditor
                         {
                             username = username.Substring(username.IndexOf(@"\") + 1);
                         }
-                        if (machineInfoObject.userInfoRecords.Where(u => u.username == username).Count() > 0)
+                        if (machineInfoObject.userInfoRecords.Where(u => string.Compare(u.username, username, true) == 0).Count() > 0)
                         {
-                            userInfoRecord = machineInfoObject.userInfoRecords.Where(u => u.username == username).FirstOrDefault();
+                            userInfoRecord = machineInfoObject.userInfoRecords.Where(u => string.Compare(u.username, username, true) == 0).FirstOrDefault();
                         }
                         else
                         {
@@ -209,9 +209,9 @@ namespace LogonAuditor
                     {
                         userSID = "NULL";
                     }
-                    if (machineInfoObject.userInfoRecords.Where(u => u.username == username).Count() > 0)
+                    if (machineInfoObject.userInfoRecords.Where(u => string.Compare(u.username, username, true) == 0).Count() > 0)
                     {
-                        userInfoRecord = machineInfoObject.userInfoRecords.Where(u => u.username == username).FirstOrDefault();
+                        userInfoRecord = machineInfoObject.userInfoRecords.Where(u => string.Compare(u.username, username, true) == 0).FirstOrDefault();
                     }
                     else
                     {
@@ -240,8 +240,7 @@ namespace LogonAuditor
                 if (num % 100 == 0)
                 {
                     temp = num;
-                    Application.Current.Dispatcher.Invoke(new Action(() => { textBlock.Clear(); textBlock.Text = temp.ToString() + " events processed."; }));
-                    
+                    Application.Current.Dispatcher.Invoke(new Action(() => { textBlock.Clear(); textBlock.Text = temp.ToString() + " events processed."; }));                    
                 }
             }
             temp = num;
