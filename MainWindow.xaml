@@ -89,7 +89,7 @@
                                     </ListView.View>
                                 </ListView>
                             </TabItem>
-                            <TabItem Header="Hours">
+                            <TabItem Header="Log On Hours">
                                 <ListView x:Name="HoursListBox">
                                     <ListView.View>
                                         <GridView x:Name="HoursGrid">
@@ -99,7 +99,7 @@
                                     </ListView.View>
                                 </ListView>
                             </TabItem>
-                            <TabItem Header="Days">
+                            <TabItem Header="Log On Days">
                                 <ListView x:Name="DaysListBox">
                                 <ListView.View>
                                     <GridView x:Name="DaysGrid">

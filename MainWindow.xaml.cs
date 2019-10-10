@@ -224,18 +224,7 @@ namespace LogonAuditor
                     }
                 }
                 SaveFirstLast(eventDetail, userInfoRecord);
-                if (eventDetail.Id == 7001)
-                {                                        
-                    evalDateTime(eventDetail, userInfoRecord);
-                }
-                else if (eventDetail.Id == 7002)
-                {
-                    evalDateTime(eventDetail, userInfoRecord);
-                }
-                else if (eventDetail.Id == 4625)
-                {                    
-                    evalDateTime(eventDetail, userInfoRecord);
-                }
+                evalDateTime(eventDetail, userInfoRecord);                
                 num++;
                 if (num % 100 == 0)
                 {

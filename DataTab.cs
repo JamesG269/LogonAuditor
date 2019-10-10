@@ -144,7 +144,6 @@ namespace LogonAuditor
                     column.Width = 0;
                     column.Width = double.NaN;
                 }
-
             }
         }
         private void ListViewTargetUpdated(ListView listViewToUpdate)
